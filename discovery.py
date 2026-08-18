@@ -64,11 +64,21 @@ class Discovery:
 
         loop = asyncio.get_running_loop()
 
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
+        if sys.platform != "win32":
+            try:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            except (AttributeError, OSError):
+                pass
+
+        sock.bind(("0.0.0.0", DISCOVERY_PORT))
+
         transport, _ = await loop.create_datagram_endpoint(
             lambda: DiscoveryProtocol(self.room_received),
-            local_addr=("0.0.0.0", DISCOVERY_PORT),
-            allow_broadcast=True,
-            reuse_port=sys.platform != "win32"
+            sock=sock
         )
 
         self.transport = transport

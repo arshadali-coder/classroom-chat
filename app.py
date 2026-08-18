@@ -68,31 +68,38 @@ async def create_room(username):
     local_ip = get_local_ip()
 
     print(f"\nYour LAN IP: {local_ip}")
-    print("\nWaiting for people to join...")
-    print("Press CTRL+C to stop the room.\n")
+    print("Room started! Connecting to chat...")
 
-    # Send an initial announcement immediately
-    room_info = room.get_room_info(local_ip)
-    discovery.announce(room_info)
+    async def announce_loop():
+        try:
+            while True:
+                room_info = room.get_room_info(local_ip)
+                discovery.announce(room_info)
+                await asyncio.sleep(2)
+        except asyncio.CancelledError:
+            pass
+
+    announce_task = asyncio.create_task(announce_loop())
+
+    client = RoomClient(
+        "127.0.0.1",
+        room.port,
+        username
+    )
 
     try:
 
-        while True:
+        await client.connect()
 
-            room_info = room.get_room_info(
-                local_ip
-            )
+        await chat_interface(client)
 
-            discovery.announce(room_info)
+    except Exception as e:
 
-            await asyncio.sleep(2)
-
-    except KeyboardInterrupt:
-
-        print("\nStopping room...")
+        print(f"\nChat error: {e}")
 
     finally:
 
+        announce_task.cancel()
         await discovery.stop()
         await room.stop()
 
@@ -148,76 +155,81 @@ async def main():
         print("Username cannot be empty.")
         return
 
-    discovery = Discovery()
+    while True:
 
-    await discovery.start()
+        discovery = Discovery()
 
-    print(
-        "\nSearching for rooms on your network..."
-    )
+        await discovery.start()
 
-    await asyncio.sleep(3)
+        print(
+            "\nSearching for rooms on your network..."
+        )
 
-    rooms = list(discovery.rooms.values())
+        await asyncio.sleep(3)
 
-    print("\nRooms found:\n")
+        rooms = list(discovery.rooms.values())
 
-    if not rooms:
+        print("\nRooms found:\n")
 
-        print("  No rooms found.\n")
+        if not rooms:
 
-    else:
+            print("  No rooms found.\n")
 
-        for index, room in enumerate(rooms, 1):
+        else:
 
-            print(
-                f"  [{index}] "
-                f"{room['room_name']} "
-                f"({room['users']} users)"
-            )
+            for index, room in enumerate(rooms, 1):
 
-    print(
-        """
+                print(
+                    f"  [{index}] "
+                    f"{room['room_name']} "
+                    f"({room['users']} users)"
+                )
+
+        print(
+            """
   [C] Create a room
   [R] Refresh
   [Q] Quit
 """
-    )
+        )
 
-    choice = input("> ").strip().lower()
+        choice = input("> ").strip().lower()
 
-    await discovery.stop()
+        await discovery.stop()
 
-    if choice == "c":
+        if choice == "c":
 
-        await create_room(username)
+            await create_room(username)
+            break
 
-    elif choice == "q":
+        elif choice == "q":
 
-        print("Goodbye!")
+            print("Goodbye!")
+            break
 
-    elif choice.isdigit():
+        elif choice.isdigit():
 
-        index = int(choice) - 1
+            index = int(choice) - 1
 
-        if 0 <= index < len(rooms):
+            if 0 <= index < len(rooms):
 
-            await join_room(
-                username,
-                rooms[index]
-            )
+                await join_room(
+                    username,
+                    rooms[index]
+                )
+                break
+
+            else:
+
+                print("Invalid room.")
+
+        elif choice == "r":
+
+            continue
 
         else:
 
-            print("Invalid room.")
-
-    elif choice == "r":
-
-        await main()
-
-    else:
-
-        print("Invalid choice.")
+            print("Invalid choice.")
 
 
 if __name__ == "__main__":

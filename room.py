@@ -144,7 +144,7 @@ class RoomServer:
             "room_name": self.room_name,
             "host": host_ip,
             "port": self.port,
-            "users": len(self.clients) + 1
+            "users": len(self.clients)
         }
 
 
