@@ -1,6 +1,7 @@
 import asyncio
 import json
 import socket
+import sys
 
 
 DISCOVERY_PORT = 37020
@@ -56,7 +57,7 @@ class Discovery:
             lambda: DiscoveryProtocol(self.room_received),
             local_addr=("0.0.0.0", DISCOVERY_PORT),
             allow_broadcast=True,
-            reuse_port=True
+            reuse_port=sys.platform != "win32"
         )
 
         self.transport = transport
