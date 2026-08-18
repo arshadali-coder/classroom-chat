@@ -22,6 +22,17 @@ def get_local_ip():
         return "127.0.0.1"
 
 
+def get_broadcast_destinations():
+    destinations = {"255.255.255.255"}
+    local_ip = get_local_ip()
+    if local_ip and local_ip != "127.0.0.1":
+        parts = local_ip.split(".")
+        if len(parts) == 4:
+            # Guess Class C broadcast address for the local subnet
+            destinations.add(".".join(parts[:3] + ["255"]))
+    return list(destinations)
+
+
 class DiscoveryProtocol(asyncio.DatagramProtocol):
 
     def __init__(self, callback):
@@ -76,10 +87,14 @@ class Discovery:
 
         message = json.dumps(room).encode()
 
-        self.transport.sendto(
-            message,
-            ("255.255.255.255", DISCOVERY_PORT)
-        )
+        for dest in get_broadcast_destinations():
+            try:
+                self.transport.sendto(
+                    message,
+                    (dest, DISCOVERY_PORT)
+                )
+            except Exception:
+                pass
 
     async def stop(self):
 

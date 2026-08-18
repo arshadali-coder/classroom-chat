@@ -71,6 +71,10 @@ async def create_room(username):
     print("\nWaiting for people to join...")
     print("Press CTRL+C to stop the room.\n")
 
+    # Send an initial announcement immediately
+    room_info = room.get_room_info(local_ip)
+    discovery.announce(room_info)
+
     try:
 
         while True:
@@ -152,7 +156,7 @@ async def main():
         "\nSearching for rooms on your network..."
     )
 
-    await asyncio.sleep(2)
+    await asyncio.sleep(3)
 
     rooms = list(discovery.rooms.values())
 
