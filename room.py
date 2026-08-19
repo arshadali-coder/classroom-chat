@@ -1,6 +1,17 @@
 import asyncio
+import base64
 import json
+import os
 import uuid
+
+
+def format_size(size_bytes):
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    else:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
 
 
 class RoomServer:
@@ -55,7 +66,7 @@ class RoomServer:
 
             self.clients[writer] = username
 
-            print(f"\n✓ {username} joined the room")
+            print(f"\n[+] {username} joined the room")
 
             await self.broadcast({
                 "type": "SYSTEM",
@@ -71,7 +82,9 @@ class RoomServer:
 
                 message = json.loads(data.decode())
 
-                if message.get("type") == "MESSAGE":
+                message_type = message.get("type")
+
+                if message_type == "MESSAGE":
 
                     text = message.get("message", "")
 
@@ -81,6 +94,22 @@ class RoomServer:
                             "type": "MESSAGE",
                             "username": username,
                             "message": text
+                        })
+
+                elif message_type == "FILE":
+
+                    filename = message.get("filename")
+                    filesize = message.get("filesize", 0)
+                    content = message.get("content", "")
+
+                    if filename and content:
+
+                        await self.broadcast({
+                            "type": "FILE",
+                            "username": username,
+                            "filename": filename,
+                            "filesize": filesize,
+                            "content": content
                         })
 
         except Exception as e:
@@ -93,7 +122,7 @@ class RoomServer:
 
             if username:
 
-                print(f"\n✗ {username} left the room")
+                print(f"\n[-] {username} left the room")
 
                 await self.broadcast({
                     "type": "SYSTEM",
@@ -177,7 +206,7 @@ class RoomClient:
 
         await self.writer.drain()
 
-        print(f"\n✓ Connected to {self.host}:{self.port}")
+        print(f"\n[+] Connected to {self.host}:{self.port}")
 
     async def receive_messages(self):
 
@@ -208,9 +237,42 @@ class RoomClient:
                         f"{message['message']}"
                     )
 
+                elif message_type == "FILE":
+
+                    sender = message.get("username", "Unknown")
+                    raw_filename = message.get("filename", "file")
+                    filesize = message.get("filesize", 0)
+                    content = message.get("content", "")
+
+                    safe_filename = os.path.basename(raw_filename)
+                    if not safe_filename:
+                        safe_filename = "downloaded_file"
+
+                    os.makedirs("downloads", exist_ok=True)
+
+                    dest_path = os.path.join("downloads", safe_filename)
+                    base_name, ext = os.path.splitext(safe_filename)
+                    counter = 1
+
+                    while os.path.exists(dest_path):
+                        dest_path = os.path.join(
+                            "downloads", f"{base_name} ({counter}){ext}"
+                        )
+                        counter += 1
+
+                    file_bytes = base64.b64decode(content)
+                    with open(dest_path, "wb") as f:
+                        f.write(file_bytes)
+
+                    size_str = format_size(len(file_bytes))
+                    print(
+                        f"\n[File] {sender} shared '{safe_filename}' "
+                        f"({size_str}) -> Saved to {dest_path}"
+                    )
+
                 print("> ", end="", flush=True)
 
-            except Exception:
+            except Exception as e:
 
                 break
 
@@ -226,6 +288,50 @@ class RoomClient:
         )
 
         await self.writer.drain()
+
+    async def send_file(self, file_path):
+
+        clean_path = file_path.strip("\"'")
+
+        if not os.path.isfile(clean_path):
+            print(f"\n[Error] File not found: {clean_path}")
+            return False
+
+        file_size = os.path.getsize(clean_path)
+        max_size = 50 * 1024 * 1024  # 50 MB limit
+
+        if file_size > max_size:
+            print(f"\n[Error] File exceeds max size limit of 50 MB ({format_size(file_size)})")
+            return False
+
+        try:
+            with open(clean_path, "rb") as f:
+                raw_bytes = f.read()
+
+            encoded_content = base64.b64encode(raw_bytes).decode("ascii")
+            filename = os.path.basename(clean_path)
+
+            message = {
+                "type": "FILE",
+                "filename": filename,
+                "filesize": file_size,
+                "content": encoded_content
+            }
+
+            self.writer.write(
+                (json.dumps(message) + "\n").encode()
+            )
+
+            await self.writer.drain()
+
+            print(
+                f"\n[+] Shared file '{filename}' ({format_size(file_size)})"
+            )
+            return True
+
+        except Exception as e:
+            print(f"\n[Error] Failed to send file: {e}")
+            return False
 
     async def close(self):
 

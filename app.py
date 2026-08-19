@@ -31,9 +31,21 @@ async def chat_interface(client):
 
             print(
                 "\nCommands:"
-                "\n  /help  - Show commands"
-                "\n  /quit  - Leave room\n"
+                "\n  /help               - Show commands"
+                "\n  /share <file_path>  - Share a file with room"
+                "\n  /quit               - Leave room\n"
             )
+
+            continue
+
+        if message.strip().startswith("/share"):
+
+            parts = message.strip().split(maxsplit=1)
+            if len(parts) < 2 or not parts[1].strip():
+                print("\nUsage: /share <file_path>\n")
+            else:
+                file_path = parts[1].strip()
+                await client.send_file(file_path)
 
             continue
 
